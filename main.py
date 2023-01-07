@@ -1,7 +1,7 @@
 import copy
-import random
 import numpy as np
 
+timeToExit = False
 
 def sudoku_solver(sudoku):
     """
@@ -19,15 +19,12 @@ def sudoku_solver(sudoku):
     ### YOUR CODE HERE
 
     sudokuObject = PartialSudokuState(sudoku)
+    print("START:", sudoku)
     if(sudokuObject.IsGoal()):
-        #print("Goal:")
-        #print(sudokuObject.finalValues)
         return sudokuObject.finalValues
 
     goal = DepthFirstSearch(sudokuObject).GetFinalState()
-    #print("Goal:")
-    #print(goal)
-
+    print("END:",goal)
     return goal
 
 
@@ -37,9 +34,6 @@ class PartialSudokuState:
     # If the position on the initial sudoku has a final value, set the position in the possbileValues array to an array length 1 of that value
     # If not, sets the position in the possbileValues array to an array of numbers (1,9)
     def __init__(self, sudoku):
-
-        #print("Sudoku:")
-        #print(sudoku)
 
         self.finalValues = sudoku
 
@@ -52,33 +46,39 @@ class PartialSudokuState:
                 if (sudoku[row][column] != 0):
                     if(sudoku[row][column] in self.possibleValues[row][column]):
                         self.possibleValues[row][column] = [sudoku[row][column]]
-                        self.RemoveFromRow(sudoku[row][column], row)
-                        self.RemoveFromColumn(sudoku[row][column], column)
+                        self.RemoveFromRow(sudoku[row][column], row, column)
+                        self.RemoveFromColumn(sudoku[row][column], row, column)
                         self.RemoveFromBlock(sudoku[row][column], row, column)
                     else:
                         self.finalValues = np.full((9, 9), -1.)
 
     # Method to remove a possible number from all lists of possible values in that row
-    def RemoveFromRow(self, number, row):
-        for column in range(9):
-            if (number in self.possibleValues[row][column]):
-                self.possibleValues[row][column].remove(number)
+    def RemoveFromRow(self, number, row, column):
+        for everyColumn in range(9):
+            if (number in self.possibleValues[row][everyColumn]):
+                self.possibleValues[row][everyColumn].remove(number)
+        self.possibleValues[row][column]=[number]
+        return self.possibleValues
+    
 
     # Method to remove a possible number from all lists of possible values in that column
-    def RemoveFromColumn(self, number, column):
-        for row in range(9):
-            if (number in self.possibleValues[row][column]):
-                self.possibleValues[row][column].remove(number)
+    def RemoveFromColumn(self, number, row, column):
+        for everyRow in range(9):
+            if number in self.possibleValues[everyRow][column]:
+                self.possibleValues[everyRow][column].remove(number)
+        self.possibleValues[row][column] = [number]
+        return self.possibleValues
 
     # Method to remove a possible number from all lists of possible values in that 3x3 block
     def RemoveFromBlock(self, number, row, column):
         a = (row // 3) * 3
         b = (column // 3) * 3
-        for row in range(3):
-            for column in range(3):
-                if (number in self.possibleValues[row + a][column + b]):
-                    self.possibleValues[row + a][column + b].remove(number)
-
+        for everyRow in range(3):
+            for everyColumn in range(3):
+                if (number in self.possibleValues[everyRow + a][everyColumn + b]):
+                    self.possibleValues[everyRow + a][everyColumn + b].remove(number)
+        self.possibleValues[row][column] = [number]
+        return self.possibleValues
     def IsGoal(self):
         # Returns true if the partial state is a goal state meaning every position in the grid has a final value(1-9) or is an array of -1.
         for row in range (9):
@@ -115,9 +115,19 @@ class PartialSudokuState:
     #   return [index for index, values in enumerate(self.possibleValues)
     #          if len(values) == 1 and self.final_values[index] == -1]
 
+    def GetSingletonPositions(self):
+        positions = []
+        for everyRow in range(9):
+            for everyColumn in range(9):
+                if (len(self.possibleValues[everyRow][everyColumn])==1 and self.finalValues[everyRow][everyColumn]==0):
+                    positions.append(everyRow)
+                    positions.append(everyColumn)
+        return positions
+
     def setValue(self, row, column, value):
         """Returns a new state with this column set to this row, and the change propagated to other domains"""
         if value not in self.possibleValues[row][column]:
+
             raise ValueError(f"{row} is not a valid choice for column {column}")
 
         # create a deep copy: the method returns a new state, does not modify the existing one
@@ -127,8 +137,8 @@ class PartialSudokuState:
         state.possibleValues[row][column] = [value]
         state.finalValues[row][column] = value
 
-        state.RemoveFromRow(value, row)
-        state.RemoveFromColumn(value, column)
+        state.RemoveFromRow(value, row, column)
+        state.RemoveFromColumn(value, row, column)
         state.RemoveFromBlock(value, row, column)
 
         # if any other columns with no final value only have 1 possible value, make them final
@@ -138,42 +148,53 @@ class PartialSudokuState:
         #  state = state.set_value(col, state.possibleValues[col][0])
         # singleton_columns = state.get_singleton_columns()
 
+        singletonPositions = state.GetSingletonPositions()
+        while len(singletonPositions) > 0:
+            state = state.setValue(singletonPositions[0],singletonPositions[1], state.possibleValues[singletonPositions[0]][singletonPositions[1]][0])
+            singletonPositions = state.GetSingletonPositions()
+
         return state
 
     def CreateErrorSudoku(self):
         self.finalValues = np.full((9, 9), -1.)
         return self
 
-
 # Returns a (row, column) tuple of a position that has only 1 choice
 def PickNextPosition(partialState):
-    for row in range(9):
-        for column in range(9):
-            if len(partialState.possibleValues[row][column]) == 1:
-                return (row, column)
-
+    smallestNumber = 1
+    while smallestNumber<=9:
+        for row in range(9):
+            for column in range(9):
+                if len(partialState.possibleValues[row][column]) == smallestNumber and partialState.finalValues[row][column] == 0:
+                    return (row, column)
+        smallestNumber = smallestNumber + 1
+    return -1
 
 def DepthFirstSearch(partialState):
-    """
-    This will do a depth first search on partial states, trying
-    each possible value for a single column.
+    print("depth top")
 
-    Notice that we do not need to try every column: if we try
-    every possible value for a column and can't find a
-    solution, then there is no possible value for this column,
-    so there is no solution.
-    """
+    global timeToExit
+
     index = PickNextPosition(partialState)
-    value = partialState.GetPossibleValues(index[0], index[1])[0]
+    if (index==-1):
+        partialState.CreateErrorSudoku()
+        timeToExit=True
 
-    newState = partialState.setValue(index[0], index[1], value)
-    if newState.IsGoal():
-        return newState
-    if not newState.IsInvalid():
-        deepState = DepthFirstSearch(newState)
-        if deepState.finalValues [0][0] != -1 and deepState.IsGoal():
-            return deepState
-    return partialState.CreateErrorSudoku()
+    if timeToExit:
+        return None
+    values = partialState.GetPossibleValues(index[0], index[1])
 
 
-sudoku_solver(np.load(f"data/medium_puzzle.npy")[1])
+    for value in values:
+        newState = partialState.setValue(index[0], index[1], value)
+        if newState.IsGoal():
+            return newState
+        if not newState.IsInvalid():
+            print("depth")
+            deepState = DepthFirstSearch(newState)
+            if deepState is not None and deepState.IsGoal():
+                return deepState
+    return None
+
+
+sudoku_solver(np.load(f"data/easy_puzzle.npy")[1])
