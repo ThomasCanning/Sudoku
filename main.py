@@ -2,8 +2,10 @@ import copy
 import numpy as np
 
 timeToExit = False
+guessState = None
 
 def sudoku_solver(sudoku):
+    global timeToExit
     """
     Solves a Sudoku puzzle and returns its unique solution.
 
@@ -23,8 +25,13 @@ def sudoku_solver(sudoku):
     if(sudokuObject.IsGoal()):
         return sudokuObject.finalValues
 
-    goal = DepthFirstSearch(sudokuObject).GetFinalState()
+    goal = DepthFirstSearch(sudokuObject)
+    if goal is None:
+        goal = np.full((9, 9), -1.)
+    else:
+        goal = goal.GetFinalState()
     print("END:",goal)
+    timeToExit = False
     return goal
 
 
@@ -148,10 +155,10 @@ class PartialSudokuState:
         #  state = state.set_value(col, state.possibleValues[col][0])
         # singleton_columns = state.get_singleton_columns()
 
-        singletonPositions = state.GetSingletonPositions()
-        while len(singletonPositions) > 0:
-            state = state.setValue(singletonPositions[0],singletonPositions[1], state.possibleValues[singletonPositions[0]][singletonPositions[1]][0])
-            singletonPositions = state.GetSingletonPositions()
+        #singletonPositions = state.GetSingletonPositions()
+        #while len(singletonPositions) > 0:
+        #    state = state.setValue(singletonPositions[0],singletonPositions[1], state.possibleValues[singletonPositions[0]][singletonPositions[1]][0])
+        #    singletonPositions = state.GetSingletonPositions()
 
         return state
 
@@ -161,40 +168,71 @@ class PartialSudokuState:
 
 # Returns a (row, column) tuple of a position that has only 1 choice
 def PickNextPosition(partialState):
+    global guessState
     smallestNumber = 1
     while smallestNumber<=9:
         for row in range(9):
             for column in range(9):
                 if len(partialState.possibleValues[row][column]) == smallestNumber and partialState.finalValues[row][column] == 0:
+                    if smallestNumber != 1:
+                        print("A guess is made")
+                        guessState = copy.deepcopy(partialState)
+                        print("Before: ",guessState.possibleValues[row][column])
+                        guessState.possibleValues[row][column].remove(guessState.possibleValues[row][column][0])
+                        print("After: ", guessState.possibleValues[row][column])
+                        print(row, column)
                     return (row, column)
         smallestNumber = smallestNumber + 1
+        print("NUMBER: ",smallestNumber)
+    print("OH NO")
     return -1
 
 def DepthFirstSearch(partialState):
-    print("depth top")
+
+    print("POSSIBLE VALUES:")
+    print(partialState.possibleValues)
 
     global timeToExit
+    global guessState
 
     index = PickNextPosition(partialState)
+
+
+
     if (index==-1):
-        partialState.CreateErrorSudoku()
-        timeToExit=True
+        print("Index is -1")
+        print("CHECKING: ",guessState)
+        if guessState != None:
+            print("Entering guessstate")
+            print(partialState.possibleValues)
+            print(guessState.possibleValues)
+            partialState = guessState
+            print(partialState.possibleValues)
+            index = PickNextPosition(partialState)
+            if index == -1:
+                partialState.CreateErrorSudoku()
+                timeToExit = True
+            else:
+                guessState = None
+        else:
+            partialState.CreateErrorSudoku()
+            timeToExit=True
 
     if timeToExit:
+        print("BOUNCE")
         return None
-    values = partialState.GetPossibleValues(index[0], index[1])
 
+    values = partialState.GetPossibleValues(index[0], index[1])
 
     for value in values:
         newState = partialState.setValue(index[0], index[1], value)
         if newState.IsGoal():
             return newState
         if not newState.IsInvalid():
-            print("depth")
             deepState = DepthFirstSearch(newState)
             if deepState is not None and deepState.IsGoal():
                 return deepState
     return None
 
 
-sudoku_solver(np.load(f"data/easy_puzzle.npy")[1])
+sudoku_solver(np.load(f"data/hard_puzzle.npy")[2])
